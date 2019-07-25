@@ -326,31 +326,36 @@ seriesProto.destroyClusteredData = function () {
 // Override the generatePoints method by adding a reference to grouped data
 seriesProto.generatePoints = function () {
     var series = this,
-        clusterOptions = series.options.marker.cluster,
-        algorithm = clusterOptions.layoutAlgorithm.type;
+        marker = series.options.marker,
+        algorithm,
+        clusteredData;
 
-    if (clusterOptions.enabled) {
-        var test = clusterAlgorithms[algorithm].call(
+    if (marker && marker.cluster && marker.cluster.enabled) {
+        algorithm = marker.cluster.layoutAlgorithm.type;
+
+        clusteredData = clusterAlgorithms[algorithm].call(
             this,
             series.processedXData,
             series.processedYData,
-            clusterOptions.layoutAlgorithm
+            marker.cluster.layoutAlgorithm
         );
 
-        series.processedXData = test.groupedXData;
-        series.processedYData = test.groupedYData;
+        series.processedXData = clusteredData.groupedXData;
+        series.processedYData = clusteredData.groupedYData;
 
         series.hasGroupedData = true;
-        series.clusters = test;
-        series.groupMap = test.groupMap;
+        series.clusters = clusteredData;
+        series.groupMap = clusteredData.groupMap;
+
+        baseGeneratePoints.apply(this);
+
+        // Record grouped data in order to let it be destroyed the next time
+        // processData runs
+        this.destroyClusteredData();
+        this.groupedData = this.hasGroupedData ? this.points : null;
+    } else {
+        baseGeneratePoints.apply(this);
     }
-
-    baseGeneratePoints.apply(this);
-
-    // Record grouped data in order to let it be destroyed the next time
-    // processData runs
-    this.destroyClusteredData();
-    this.groupedData = this.hasGroupedData ? this.points : null;
 };
 
 // Override point prototype to throw a warning when trying to update
