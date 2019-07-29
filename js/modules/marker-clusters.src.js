@@ -52,10 +52,10 @@ clusterDefaultOptions = {
          *
          * @type {string}
          */
-        type: 'grid',
+        type: 'gridOnMap',
 
         /**
-         * When `type` is set to 'grid',
+         * When `type` is set to 'gridOnView',
          * `gridSize` is a size of a grid item element.
          *
          * @type    {number}
@@ -134,7 +134,7 @@ var debug = {
         elem = chart.renderer
             .circle(x, y, 15)
             .attr({
-                fill: series.color,
+                fill: 'rgba(0, 255, 0, 0.1)',
                 'stroke-width': '1px',
                 stroke: '#000'
             })
@@ -153,13 +153,13 @@ var debug = {
         chart[clusterId].push(elem);
         chart[clusterId].push(textElem);
     },
-    drawGridLines: function (size, series) {
+    drawGridLinesPerView: function (size, series) {
         var chart = series.chart,
             xAxisLen = series.xAxis.len,
             yAxisLen = series.yAxis.len,
             gridX = Math.ceil(xAxisLen / size),
             gridY = Math.ceil(yAxisLen / size),
-            i, j, elem;
+            i, j, elem, text;
 
         if (chart.debugGridLines && chart.debugGridLines.length) {
             chart.debugGridLines.forEach(function (gridItem) {
@@ -187,7 +187,97 @@ var debug = {
                     .add()
                     .toFront();
 
+                text = chart.renderer
+                    .text(
+                        j + '-' + i,
+                        chart.plotLeft + i * size + 5,
+                        chart.plotTop + j * size + 15
+                    )
+                    .css({
+                        fill: 'rgba(0, 0, 0, 0.7)',
+                        fontSize: '12px'
+                    })
+                    .add()
+                    .toFront();
+
                 chart.debugGridLines.push(elem);
+                chart.debugGridLines.push(text);
+            }
+        }
+    },
+    drawGridLinesPerMap: function (size, series) {
+        var chart = series.chart,
+            xAxis = series.xAxis,
+            yAxis = series.yAxis,
+            xAxisLen = series.xAxis.len,
+            yAxisLen = series.yAxis.len,
+            i, j, elem, text,
+            scaleX = (xAxis.max - xAxis.min) / (xAxis.dataMax - xAxis.dataMin),
+            scaleY = (yAxis.max - yAxis.min) / (yAxis.dataMax - yAxis.dataMin),
+            mapXSize = xAxisLen / scaleX,
+            mapYSize = yAxisLen / scaleY,
+            gridX = Math.ceil(mapXSize / size),
+            gridY = Math.ceil(mapYSize / size),
+            offsetX = xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin),
+            offsetY = yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin),
+            currentX = 0,
+            currentY = 0;
+
+        if (chart.debugGridLines && chart.debugGridLines.length) {
+            chart.debugGridLines.forEach(function (gridItem) {
+                if (gridItem && gridItem.destroy) {
+                    gridItem.destroy();
+                }
+            });
+        }
+
+        chart.debugGridLines = [];
+
+        for (i = 0; i < gridX; i++) {
+            currentX = i * size;
+
+            if (
+                currentX >= (offsetX - size) &&
+                currentX <= xAxisLen + offsetX
+            ) {
+                for (j = 0; j < gridY; j++) {
+                    currentY = j * size;
+
+                    if (
+                        currentY >= (offsetY - size) &&
+                        currentY <= yAxisLen + offsetY
+                    ) {
+                        elem = chart.renderer
+                            .rect(
+                                chart.plotLeft + i * size - offsetX,
+                                chart.plotTop + j * size - offsetY,
+                                size,
+                                size
+                            )
+                            .attr({
+                                stroke: '#000',
+                                'stroke-width': '1px'
+                            })
+                            .add()
+                            .toFront();
+
+                        text = chart.renderer
+                            .text(
+                                j + '-' + i,
+                                chart.plotLeft + i * size - offsetX + 5,
+                                chart.plotTop + j * size - offsetY + 15
+                            )
+                            .css({
+                                fill: 'rgba(0, 0, 0, 0.7)',
+                                fontSize: '11px'
+                            })
+                            .add()
+                            .toFront();
+
+                        chart.debugGridLines.push(elem);
+                        chart.debugGridLines.push(text);
+                    }
+                }
             }
         }
     }
@@ -195,7 +285,7 @@ var debug = {
 
 
 var clusterAlgorithms = {
-    grid: function (processedXData, processedYData, options) {
+    gridOnView: function (processedXData, processedYData, options) {
         var series = this,
             chart = series.chart,
             xAxis = series.xAxis,
@@ -216,11 +306,126 @@ var clusterAlgorithms = {
         debug.destroyClusters(series);
 
         // ---- Debug: needed to draw grid lines ---- //
-        debug.drawGridLines(gridSize, series);
+        debug.drawGridLinesPerView(gridSize, series);
 
         for (i = 0; i < processedXData.length; i++) {
             x = xAxis.toPixels(processedXData[i]) - chart.plotLeft;
             y = yAxis.toPixels(processedYData[i]) - chart.plotTop;
+            gridX = Math.floor(x / gridSize);
+            gridY = Math.floor(y / gridSize);
+            key = gridY + '-' + gridX;
+
+            if (!grid[key]) {
+                grid[key] = [];
+            }
+
+            grid[key].push({
+                index: i,
+                x: processedXData[i],
+                y: processedYData[i]
+            });
+        }
+
+        index = 0;
+
+        for (var k in grid) {
+            if (grid[k].length >= minimumClusterSize) {
+
+                points = grid[k];
+                pointsLen = points.length;
+                sumX = 0;
+                sumY = 0;
+
+                for (i = 0; i < pointsLen; i++) {
+                    sumX += points[i].x;
+                    sumY += points[i].y;
+                }
+
+                // ---- Debug: needed to draw a marker cluster ---- //
+                posX = xAxis.toPixels(sumX / pointsLen);
+                posY = yAxis.toPixels(sumY / pointsLen);
+                debug.drawCluster(posX, posY, pointsLen, series);
+                // ---- Debug: needed to draw a marker cluster ---- //
+
+                clusters.push({
+                    x: sumX / pointsLen,
+                    y: sumY / pointsLen,
+                    id: k,
+                    index: index,
+                    points: points
+                });
+
+                groupedXData.push(sumX / pointsLen);
+                groupedYData.push(sumY / pointsLen);
+
+                groupMap.push({
+                    options: {
+                        marker: {
+                            symbol: 'cluster'
+                        }
+                    }
+                });
+
+            } else {
+                for (i = 0; i < grid[k].length; i++) {
+                    // Points not belonging to any cluster.
+                    groupedXData.push(grid[k][i].x);
+                    groupedYData.push(grid[k][i].y);
+
+                    noise.push({
+                        x: grid[k][i].x,
+                        y: grid[k][i].y,
+                        id: k,
+                        index: index,
+                        points: grid[k]
+                    });
+
+                    groupMap.push({
+                        options: {}
+                    });
+                }
+            }
+
+            index++;
+        }
+
+        return {
+            clusters: clusters,
+            noise: noise,
+            groupedXData: groupedXData,
+            groupedYData: groupedYData,
+            groupMap: groupMap
+        };
+    },
+    gridOnMap: function (processedXData, processedYData, options) {
+        var series = this,
+            chart = series.chart,
+            xAxis = series.xAxis,
+            yAxis = series.yAxis,
+            minimumClusterSize = options.minimumClusterSize > 2 ?
+                options.minimumClusterSize : 2,
+            gridSize = options.gridSize,
+            groupedXData = [],
+            groupedYData = [],
+            clusters = [], // Container for clusters.
+            noise = [], // Container for points not belonging to any cluster.
+            grid = {},
+            groupMap = [],
+            offsetX = xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin),
+            offsetY = yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin),
+            x, y, gridX, gridY, key, i, points,
+            pointsLen, posX, posY, sumX, sumY, index;
+
+
+        // ---- Debug: needed to destory marker clusters ---- //
+        debug.destroyClusters(series);
+
+        // ---- Debug: needed to draw grid lines ---- //
+        debug.drawGridLinesPerMap(gridSize, series);
+
+        for (i = 0; i < processedXData.length; i++) {
+            x = xAxis.toPixels(processedXData[i]) + offsetX - chart.plotLeft;
+            y = yAxis.toPixels(processedYData[i]) + offsetY - chart.plotTop;
             gridX = Math.floor(x / gridSize);
             gridY = Math.floor(y / gridSize);
             key = gridY + '-' + gridX;
@@ -333,19 +538,21 @@ seriesProto.generatePoints = function () {
     if (marker && marker.cluster && marker.cluster.enabled) {
         algorithm = marker.cluster.layoutAlgorithm.type;
 
-        clusteredData = clusterAlgorithms[algorithm].call(
-            this,
-            series.processedXData,
-            series.processedYData,
-            marker.cluster.layoutAlgorithm
-        );
+        if (clusterAlgorithms[algorithm]) {
+            clusteredData = clusterAlgorithms[algorithm].call(
+                this,
+                series.processedXData,
+                series.processedYData,
+                marker.cluster.layoutAlgorithm
+            );
 
-        series.processedXData = clusteredData.groupedXData;
-        series.processedYData = clusteredData.groupedYData;
+            series.processedXData = clusteredData.groupedXData;
+            series.processedYData = clusteredData.groupedYData;
 
-        series.hasGroupedData = true;
-        series.clusters = clusteredData;
-        series.groupMap = clusteredData.groupMap;
+            series.hasGroupedData = true;
+            series.clusters = clusteredData;
+            series.groupMap = clusteredData.groupMap;
+        }
 
         baseGeneratePoints.apply(this);
 
