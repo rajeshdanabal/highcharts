@@ -195,7 +195,7 @@ var debug = {
                     )
                     .css({
                         fill: 'rgba(0, 0, 0, 0.7)',
-                        fontSize: '12px'
+                        fontSize: '11px'
                     })
                     .add()
                     .toFront();
@@ -212,14 +212,22 @@ var debug = {
             xAxisLen = series.xAxis.len,
             yAxisLen = series.yAxis.len,
             i, j, elem, text,
-            scaleX = (xAxis.max - xAxis.min) / (xAxis.dataMax - xAxis.dataMin),
-            scaleY = (yAxis.max - yAxis.min) / (yAxis.dataMax - yAxis.dataMin),
+            scaleX = xAxis.dataMin < xAxis.min ?
+                (xAxis.max - xAxis.min) / (xAxis.dataMax - xAxis.dataMin) : 1,
+            scaleY = yAxis.dataMin < yAxis.min ?
+                (yAxis.max - yAxis.min) / (yAxis.dataMax - yAxis.dataMin) : 1,
             mapXSize = xAxisLen / scaleX,
             mapYSize = yAxisLen / scaleY,
             gridX = Math.ceil(mapXSize / size),
             gridY = Math.ceil(mapYSize / size),
-            offsetX = xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin),
-            offsetY = yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin),
+            offsetX = xAxis.dataMin < xAxis.min ?
+                Math.abs(
+                    xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
+                ) : 0,
+            offsetY = yAxis.dataMin < yAxis.min ?
+                Math.abs(
+                    yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin)
+                ) : 0,
             currentX = 0,
             currentY = 0;
 
@@ -411,8 +419,14 @@ var clusterAlgorithms = {
             noise = [], // Container for points not belonging to any cluster.
             grid = {},
             groupMap = [],
-            offsetX = xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin),
-            offsetY = yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin),
+            offsetX = xAxis.dataMin < xAxis.min ?
+                Math.abs(
+                    xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
+                ) : 0,
+            offsetY = yAxis.dataMin < yAxis.min ?
+                Math.abs(
+                    yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin)
+                ) : 0,
             x, y, gridX, gridY, key, i, points,
             pointsLen, posX, posY, sumX, sumY, index;
 
