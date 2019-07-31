@@ -24,6 +24,8 @@ var Series = H.Series,
     defaultOptions = H.defaultOptions,
     addEvent = H.addEvent,
     setOptions = H.setOptions,
+    Tooltip = H.Tooltip,
+    format = H.format,
     baseGeneratePoints = seriesProto.generatePoints,
     clusterDefaultOptions;
 
@@ -66,7 +68,7 @@ clusterDefaultOptions = {
         minimumClusterSize: 2
     },
     style: {
-        color: 'green',
+        // color: 'green',
         symbol: 'cluster'
     },
     fillColors: [{
@@ -85,6 +87,12 @@ setOptions({
         series: {
             marker: {
                 cluster: clusterDefaultOptions
+            },
+            tooltip: {
+                headerClusterFormat: '',
+                footerClusterFormat: '',
+                pointClusterFormat: '<span>Clustered points: ' +
+                    '{point.clusteredDataLen}</span><br/>'
             }
         }
     }
@@ -298,20 +306,9 @@ var clusterAlgorithms = {
             chart = series.chart,
             xAxis = series.xAxis,
             yAxis = series.yAxis,
-            minimumClusterSize = options.minimumClusterSize > 2 ?
-                options.minimumClusterSize : 2,
             gridSize = options.gridSize,
-            groupedXData = [],
-            groupedYData = [],
-            clusters = [], // Container for clusters.
-            noise = [], // Container for points not belonging to any cluster.
             grid = {},
-            groupMap = [],
-            x, y, gridX, gridY, key, i, points,
-            pointsLen, posX, posY, sumX, sumY, index;
-
-        // ---- Debug: needed to destory marker clusters ---- //
-        debug.destroyClusters(series);
+            x, y, gridX, gridY, key, i;
 
         // ---- Debug: needed to draw grid lines ---- //
         debug.drawGridLinesPerView(gridSize, series);
@@ -334,91 +331,15 @@ var clusterAlgorithms = {
             });
         }
 
-        index = 0;
-
-        for (var k in grid) {
-            if (grid[k].length >= minimumClusterSize) {
-
-                points = grid[k];
-                pointsLen = points.length;
-                sumX = 0;
-                sumY = 0;
-
-                for (i = 0; i < pointsLen; i++) {
-                    sumX += points[i].x;
-                    sumY += points[i].y;
-                }
-
-                // ---- Debug: needed to draw a marker cluster ---- //
-                posX = xAxis.toPixels(sumX / pointsLen);
-                posY = yAxis.toPixels(sumY / pointsLen);
-                debug.drawCluster(posX, posY, pointsLen, series);
-                // ---- Debug: needed to draw a marker cluster ---- //
-
-                clusters.push({
-                    x: sumX / pointsLen,
-                    y: sumY / pointsLen,
-                    id: k,
-                    index: index,
-                    points: points
-                });
-
-                groupedXData.push(sumX / pointsLen);
-                groupedYData.push(sumY / pointsLen);
-
-                groupMap.push({
-                    options: {
-                        marker: {
-                            symbol: 'cluster'
-                        }
-                    }
-                });
-
-            } else {
-                for (i = 0; i < grid[k].length; i++) {
-                    // Points not belonging to any cluster.
-                    groupedXData.push(grid[k][i].x);
-                    groupedYData.push(grid[k][i].y);
-
-                    noise.push({
-                        x: grid[k][i].x,
-                        y: grid[k][i].y,
-                        id: k,
-                        index: index,
-                        points: grid[k]
-                    });
-
-                    groupMap.push({
-                        options: {}
-                    });
-                }
-            }
-
-            index++;
-        }
-
-        return {
-            clusters: clusters,
-            noise: noise,
-            groupedXData: groupedXData,
-            groupedYData: groupedYData,
-            groupMap: groupMap
-        };
+        return grid;
     },
     gridOnMap: function (processedXData, processedYData, options) {
         var series = this,
             chart = series.chart,
             xAxis = series.xAxis,
             yAxis = series.yAxis,
-            minimumClusterSize = options.minimumClusterSize > 2 ?
-                options.minimumClusterSize : 2,
             gridSize = options.gridSize,
-            groupedXData = [],
-            groupedYData = [],
-            clusters = [], // Container for clusters.
-            noise = [], // Container for points not belonging to any cluster.
             grid = {},
-            groupMap = [],
             offsetX = xAxis.dataMin < xAxis.min ?
                 Math.abs(
                     xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
@@ -427,15 +348,10 @@ var clusterAlgorithms = {
                 Math.abs(
                     yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin)
                 ) : 0,
-            x, y, gridX, gridY, key, i, points,
-            pointsLen, posX, posY, sumX, sumY, index;
-
-
-        // ---- Debug: needed to destory marker clusters ---- //
-        debug.destroyClusters(series);
+            x, y, gridX, gridY, key, i;
 
         // ---- Debug: needed to draw grid lines ---- //
-        debug.drawGridLinesPerMap(gridSize, series);
+        // debug.drawGridLinesPerMap(options.gridSize, series);
 
         for (i = 0; i < processedXData.length; i++) {
             x = xAxis.toPixels(processedXData[i]) + offsetX - chart.plotLeft;
@@ -455,81 +371,108 @@ var clusterAlgorithms = {
             });
         }
 
-        index = 0;
-
-        for (var k in grid) {
-            if (grid[k].length >= minimumClusterSize) {
-
-                points = grid[k];
-                pointsLen = points.length;
-                sumX = 0;
-                sumY = 0;
-
-                for (i = 0; i < pointsLen; i++) {
-                    sumX += points[i].x;
-                    sumY += points[i].y;
-                }
-
-                // ---- Debug: needed to draw a marker cluster ---- //
-                posX = xAxis.toPixels(sumX / pointsLen);
-                posY = yAxis.toPixels(sumY / pointsLen);
-                debug.drawCluster(posX, posY, pointsLen, series);
-                // ---- Debug: needed to draw a marker cluster ---- //
-
-                clusters.push({
-                    x: sumX / pointsLen,
-                    y: sumY / pointsLen,
-                    id: k,
-                    index: index,
-                    points: points
-                });
-
-                groupedXData.push(sumX / pointsLen);
-                groupedYData.push(sumY / pointsLen);
-
-                groupMap.push({
-                    options: {
-                        marker: {
-                            symbol: 'cluster'
-                        }
-                    }
-                });
-
-            } else {
-                for (i = 0; i < grid[k].length; i++) {
-                    // Points not belonging to any cluster.
-                    groupedXData.push(grid[k][i].x);
-                    groupedYData.push(grid[k][i].y);
-
-                    noise.push({
-                        x: grid[k][i].x,
-                        y: grid[k][i].y,
-                        id: k,
-                        index: index,
-                        points: grid[k]
-                    });
-
-                    groupMap.push({
-                        options: {}
-                    });
-                }
-            }
-
-            index++;
-        }
-
-        return {
-            clusters: clusters,
-            noise: noise,
-            groupedXData: groupedXData,
-            groupedYData: groupedYData,
-            groupMap: groupMap
-        };
+        return grid;
     }
 };
 
+function getClusteredData(splittedData, options) {
+    var series = this,
+        minimumClusterSize = options.minimumClusterSize > 2 ?
+            options.minimumClusterSize : 2,
+        groupedXData = [],
+        groupedYData = [],
+        clusters = [], // Container for clusters.
+        noise = [], // Container for points not belonging to any cluster.
+        groupMap = [],
+        index = 0,
+        points,
+        pointsLen,
+        sumX,
+        sumY,
+        i;
 
-// Destroy the clustered data points
+    // ---- Debug: needed to destory marker clusters ---- //
+    debug.destroyClusters(series);
+
+    for (var k in splittedData) {
+        if (splittedData[k].length >= minimumClusterSize) {
+
+            points = splittedData[k];
+            pointsLen = points.length;
+            sumX = 0;
+            sumY = 0;
+
+            for (i = 0; i < pointsLen; i++) {
+                sumX += points[i].x;
+                sumY += points[i].y;
+            }
+
+            // ---- Debug: needed to draw a marker cluster ---- //
+            // var xAxis = series.xAxis,
+            //     yAxis = series.yAxis,
+            //     debugPosX = xAxis.toPixels(sumX / pointsLen),
+            //     debugPosY = yAxis.toPixels(sumY / pointsLen);
+
+            // debug.drawCluster(debugPosX, debugPosY, pointsLen, series);
+            // ---- Debug: needed to draw a marker cluster ---- //
+
+            clusters.push({
+                x: sumX / pointsLen,
+                y: sumY / pointsLen,
+                id: k,
+                index: index,
+                data: points
+            });
+
+            groupedXData.push(sumX / pointsLen);
+            groupedYData.push(sumY / pointsLen);
+
+            groupMap.push({
+                options: {
+                    marker: {
+                        symbol: options.style.symbol || 'cluster',
+                        fillColor: options.style.color,
+                        lineColor: options.style.color
+                    },
+                    key: splittedData[k].length
+                }
+            });
+        } else {
+            for (i = 0; i < splittedData[k].length; i++) {
+                // Points not belonging to any cluster.
+                groupedXData.push(splittedData[k][i].x);
+                groupedYData.push(splittedData[k][i].y);
+
+                noise.push({
+                    x: splittedData[k][i].x,
+                    y: splittedData[k][i].y,
+                    id: k,
+                    index: index,
+                    data: splittedData[k]
+                });
+
+                groupMap.push({
+                    options: {
+                        name: series.options.data[index].name
+                    }
+                });
+            }
+        }
+
+        index++;
+    }
+
+    return {
+        clusters: clusters,
+        noise: noise,
+        groupedXData: groupedXData,
+        groupedYData: groupedYData,
+        groupMap: groupMap
+    };
+}
+
+
+// Destroy clustered data points
 seriesProto.destroyClusteredData = function () {
     var groupedData = this.groupedData;
 
@@ -547,17 +490,24 @@ seriesProto.generatePoints = function () {
     var series = this,
         marker = series.options.marker,
         algorithm,
-        clusteredData;
+        clusteredData,
+        splittedData,
+        point;
 
     if (marker && marker.cluster && marker.cluster.enabled) {
         algorithm = marker.cluster.layoutAlgorithm.type;
 
         if (clusterAlgorithms[algorithm]) {
-            clusteredData = clusterAlgorithms[algorithm].call(
+
+            splittedData = clusterAlgorithms[algorithm].call(
                 this,
                 series.processedXData,
                 series.processedYData,
                 marker.cluster.layoutAlgorithm
+            );
+
+            clusteredData = getClusteredData.call(
+                this, splittedData, marker.cluster
             );
 
             series.processedXData = clusteredData.groupedXData;
@@ -569,6 +519,21 @@ seriesProto.generatePoints = function () {
         }
 
         baseGeneratePoints.apply(this);
+
+        // Mark cluster points. Safe point reference in the cluster object.
+        series.clusters.clusters.forEach(function (cluster) {
+            point = series.points[cluster.index];
+
+            point.isCluster = true;
+            point.clusteredData = cluster.data;
+            point.clusteredDataLen = cluster.data.length;
+            cluster.point = point;
+        });
+
+        // Safe point reference in the noise object.
+        series.clusters.noise.forEach(function (noise) {
+            noise.point = series.points[noise.index];
+        });
 
         // Record grouped data in order to let it be destroyed the next time
         // processData runs
@@ -591,3 +556,53 @@ addEvent(Point, 'update', function () {
 
 // Destroy grouped data on series destroy
 addEvent(Series, 'destroy', seriesProto.destroyClusteredData);
+
+// Extend the original method, add pointClusterFormat.
+Tooltip.prototype.bodyFormatter = function (items) {
+    return items.map(function (item) {
+        var tooltipOptions = item.series.tooltipOptions,
+            format;
+
+        if (item.point.isCluster) {
+            format = tooltipOptions.pointClusterFormat || '';
+        } else {
+            format = tooltipOptions[
+                (item.point.formatPrefix || 'point') + 'Format'
+            ] || '';
+        }
+
+        return (
+            tooltipOptions[
+                (item.point.formatPrefix || 'point') + 'Formatter'
+            ] ||
+            item.point.tooltipFormatter
+        ).call(
+            item.point,
+            format
+        );
+    });
+};
+
+// Extend the original method, add headerClusterFormat and footerClusterFormat.
+addEvent(Tooltip, 'headerFormatter', function (e) {
+    var tooltip = this,
+        time = tooltip.chart.time,
+        labelConfig = e.labelConfig,
+        series = labelConfig.series,
+        point = labelConfig.point,
+        tooltipOptions = series.tooltipOptions,
+        partFormat = point.isCluster ? 'ClusterFormat' : 'Format',
+        formatString =
+            tooltipOptions[(e.isFooter ? 'footer' : 'header') + partFormat];
+
+    // Replace default header style with class name
+    if (series.chart.styledMode) {
+        formatString = this.styledModeFormat(formatString);
+    }
+    // return the replaced format
+    e.text = format(formatString, {
+        point: labelConfig.point,
+        series: series
+    }, time);
+    e.preventDefault();
+});
