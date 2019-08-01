@@ -24,9 +24,10 @@ var Series = H.Series,
     defaultOptions = H.defaultOptions,
     addEvent = H.addEvent,
     setOptions = H.setOptions,
-    Tooltip = H.Tooltip,
     format = H.format,
     baseGeneratePoints = seriesProto.generatePoints,
+    Tooltip = H.Tooltip,
+    baseRefreshTooltip = Tooltip.prototype.refresh,
     clusterDefaultOptions;
 
 
@@ -556,6 +557,20 @@ addEvent(Point, 'update', function () {
 
 // Destroy grouped data on series destroy
 addEvent(Series, 'destroy', seriesProto.destroyClusteredData);
+
+// Extend the original method, add clusterFormatter.
+Tooltip.prototype.refresh = function (pointOrPoints, mouseEvent) {
+    var tooltip = this,
+        options = tooltip.options,
+        baseFormatter = options.formatter;
+
+    if (pointOrPoints.isCluster && options.clusterFormatter) {
+        options.formatter = options.clusterFormatter;
+    }
+
+    baseRefreshTooltip.call(this, pointOrPoints, mouseEvent);
+    options.formatter = baseFormatter;
+};
 
 // Extend the original method, add pointClusterFormat.
 Tooltip.prototype.bodyFormatter = function (items) {
