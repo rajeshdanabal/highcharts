@@ -386,16 +386,20 @@ function getClusteredData(splittedData, options) {
         noise = [], // Container for points not belonging to any cluster.
         groupMap = [],
         index = 0,
+        point,
+        pointOptions,
         points,
         pointsLen,
         sumX,
         sumY,
-        i;
+        i,
+        k,
+        opt;
 
     // ---- Debug: needed to destory marker clusters ---- //
     debug.destroyClusters(series);
 
-    for (var k in splittedData) {
+    for (k in splittedData) {
         if (splittedData[k].length >= minimumClusterSize) {
 
             points = splittedData[k];
@@ -406,6 +410,9 @@ function getClusteredData(splittedData, options) {
             for (i = 0; i < pointsLen; i++) {
                 sumX += points[i].x;
                 sumY += points[i].y;
+
+                // Save cluster data points options.
+                points[i].options = series.options.data[points[i].index];
             }
 
             // ---- Debug: needed to draw a marker cluster ---- //
@@ -435,32 +442,39 @@ function getClusteredData(splittedData, options) {
                         fillColor: options.style.color,
                         lineColor: options.style.color
                     },
-                    key: splittedData[k].length
+                    key: pointsLen
                 }
             });
+
+            index++;
         } else {
             for (i = 0; i < splittedData[k].length; i++) {
                 // Points not belonging to any cluster.
-                groupedXData.push(splittedData[k][i].x);
-                groupedYData.push(splittedData[k][i].y);
+                point = splittedData[k][i];
+                pointOptions = {};
+                groupedXData.push(point.x);
+                groupedYData.push(point.y);
 
                 noise.push({
-                    x: splittedData[k][i].x,
-                    y: splittedData[k][i].y,
+                    x: point.x,
+                    y: point.y,
                     id: k,
                     index: index,
                     data: splittedData[k]
                 });
 
+                // Save point options.
+                for (opt in series.options.data[point.index]) {
+                    pointOptions[opt] = series.options.data[point.index][opt];
+                }
+
                 groupMap.push({
-                    options: {
-                        name: series.options.data[index].name
-                    }
+                    options: pointOptions
                 });
+
+                index++;
             }
         }
-
-        index++;
     }
 
     return {
