@@ -18,8 +18,8 @@ import './../parts/Axis.js';
 import './../parts/SvgRenderer.js';
 
 var Series = H.Series,
-    seriesProto = Series.prototype,
     Point = H.Point,
+    seriesProto = Series.prototype,
     SvgRenderer = H.SVGRenderer,
     defaultOptions = H.defaultOptions,
     addEvent = H.addEvent,
@@ -70,7 +70,8 @@ clusterDefaultOptions = {
     },
     style: {
         // color: 'green',
-        symbol: 'cluster'
+        symbol: 'cluster',
+        radius: 12
     },
     fillColors: [{
         from: 0,
@@ -101,9 +102,18 @@ setOptions({
 
 // Cluster symbol
 SvgRenderer.prototype.symbols.cluster = function (x, y, w, h) {
+    w = w * 1.2;
+    h = h * 1.2;
+
     var outerWidth = 1,
-        space = 1.5,
-        outer = this.arc(x + w / 2, y + h / 2, w, h, {
+        space = 1,
+        outer2 = this.arc(x + w / 2, y + h / 2, w + space * 2, h + space * 2, {
+            start: Math.PI * 0.5,
+            end: Math.PI * 2.5,
+            innerR: w + outerWidth * 2.5,
+            open: false
+        }),
+        outer1 = this.arc(x + w / 2, y + h / 2, w, h, {
             start: Math.PI * 0.5,
             end: Math.PI * 2.5,
             innerR: w + outerWidth,
@@ -115,7 +125,7 @@ SvgRenderer.prototype.symbols.cluster = function (x, y, w, h) {
             open: false
         });
 
-    return [...outer, ...inner];
+    return [...outer2, ...outer1, ...inner];
 };
 
 defaultOptions.symbols.push('cluster');
@@ -312,7 +322,9 @@ var clusterAlgorithms = {
             x, y, gridX, gridY, key, i;
 
         // ---- Debug: needed to draw grid lines ---- //
-        debug.drawGridLinesPerView(gridSize, series);
+        if (options.debugDrawGridLines) {
+            debug.drawGridLinesPerView(gridSize, series);
+        }
 
         for (i = 0; i < processedXData.length; i++) {
             x = xAxis.toPixels(processedXData[i]) - chart.plotLeft;
@@ -352,7 +364,9 @@ var clusterAlgorithms = {
             x, y, gridX, gridY, key, i;
 
         // ---- Debug: needed to draw grid lines ---- //
-        // debug.drawGridLinesPerMap(options.gridSize, series);
+        if (options.debugDrawGridLines) {
+            debug.drawGridLinesPerMap(options.gridSize, series);
+        }
 
         for (i = 0; i < processedXData.length; i++) {
             x = xAxis.toPixels(processedXData[i]) + offsetX - chart.plotLeft;
@@ -376,6 +390,58 @@ var clusterAlgorithms = {
     }
 };
 
+var preventClusterColisions = {
+    gridOnMap: function (x, y, k, opt) {
+        var series = this,
+            chart = series.chart,
+            xAxis = series.xAxis,
+            yAxis = series.yAxis,
+            gridX = +k.split('-')[1],
+            gridY = +k.split('-')[0],
+            gridSize = opt.layoutAlgorithm.gridSize,
+            radius = opt.style.radius + 2,
+            offsetX = xAxis.dataMin < xAxis.min ?
+                Math.abs(
+                    xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
+                ) : 0,
+            offsetY = yAxis.dataMin < yAxis.min ?
+                Math.abs(
+                    yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin)
+                ) : 0,
+            gridXPx = gridX * gridSize,
+            gridYPx = gridY * gridSize,
+            xPx = xAxis.toPixels(x) - chart.plotLeft,
+            yPx = yAxis.toPixels(y) - chart.plotTop;
+
+        if (xPx >= 0 && xPx <= xAxis.len && yPx >= 0 && yPx <= yAxis.len) {
+            xPx += offsetX;
+            yPx += offsetY;
+
+            if (xPx < gridXPx + radius) {
+                xPx = gridXPx + radius;
+            } else if (xPx > gridXPx + gridSize - radius) {
+                xPx = gridXPx + gridSize - radius;
+            }
+
+            if (yPx < gridYPx + radius) {
+                yPx = gridYPx + radius;
+            } else if (yPx > gridYPx + gridSize - radius) {
+                yPx = gridYPx + gridSize - radius;
+            }
+
+            return {
+                x: xAxis.toValue(xPx + chart.plotLeft - offsetX),
+                y: yAxis.toValue(yPx + chart.plotTop - offsetY)
+            };
+        }
+
+        return {
+            x: x,
+            y: y
+        };
+    }
+};
+
 function getClusteredData(splittedData, options) {
     var series = this,
         minimumClusterSize = options.minimumClusterSize > 2 ?
@@ -390,6 +456,7 @@ function getClusteredData(splittedData, options) {
         pointOptions,
         points,
         pointsLen,
+        clusterPos,
         sumX,
         sumY,
         i,
@@ -416,24 +483,44 @@ function getClusteredData(splittedData, options) {
             }
 
             // ---- Debug: needed to draw a marker cluster ---- //
-            // var xAxis = series.xAxis,
-            //     yAxis = series.yAxis,
-            //     debugPosX = xAxis.toPixels(sumX / pointsLen),
-            //     debugPosY = yAxis.toPixels(sumY / pointsLen);
+            if (options.layoutAlgorithm.debugDrawClusters) {
+                var xAxis = series.xAxis,
+                    yAxis = series.yAxis,
+                    debugPosX = xAxis.toPixels(sumX / pointsLen),
+                    debugPosY = yAxis.toPixels(sumY / pointsLen);
 
-            // debug.drawCluster(debugPosX, debugPosY, pointsLen, series);
+                debug.drawCluster(debugPosX, debugPosY, pointsLen, series);
+            }
             // ---- Debug: needed to draw a marker cluster ---- //
 
+            if (
+                options.layoutAlgorithm.type === 'gridOnMap' &&
+                !options.allowOverlap
+            ) {
+                clusterPos = preventClusterColisions.gridOnMap.call(
+                    this,
+                    sumX / pointsLen,
+                    sumY / pointsLen,
+                    k,
+                    options
+                );
+            } else {
+                clusterPos = {
+                    x: sumX / pointsLen,
+                    y: sumY / pointsLen
+                };
+            }
+
             clusters.push({
-                x: sumX / pointsLen,
-                y: sumY / pointsLen,
+                x: clusterPos.x,
+                y: clusterPos.y,
                 id: k,
                 index: index,
                 data: points
             });
 
-            groupedXData.push(sumX / pointsLen);
-            groupedYData.push(sumY / pointsLen);
+            groupedXData.push(clusterPos.x);
+            groupedYData.push(clusterPos.y);
 
             groupMap.push({
                 options: {
@@ -525,30 +612,34 @@ seriesProto.generatePoints = function () {
                 this, splittedData, marker.cluster
             );
 
-            series.processedXData = clusteredData.groupedXData;
-            series.processedYData = clusteredData.groupedYData;
+            if (!marker.cluster.layoutAlgorithm.debugDrawPoints) {
+                series.processedXData = clusteredData.groupedXData;
+                series.processedYData = clusteredData.groupedYData;
 
-            series.hasGroupedData = true;
-            series.clusters = clusteredData;
-            series.groupMap = clusteredData.groupMap;
+                series.hasGroupedData = true;
+                series.clusters = clusteredData;
+                series.groupMap = clusteredData.groupMap;
+            }
         }
 
         baseGeneratePoints.apply(this);
 
-        // Mark cluster points. Safe point reference in the cluster object.
-        series.clusters.clusters.forEach(function (cluster) {
-            point = series.points[cluster.index];
+        if (!marker.cluster.layoutAlgorithm.debugDrawPoints) {
+            // Mark cluster points. Safe point reference in the cluster object.
+            series.clusters.clusters.forEach(function (cluster) {
+                point = series.points[cluster.index];
 
-            point.isCluster = true;
-            point.clusteredData = cluster.data;
-            point.clusteredDataLen = cluster.data.length;
-            cluster.point = point;
-        });
+                point.isCluster = true;
+                point.clusteredData = cluster.data;
+                point.clusteredDataLen = cluster.data.length;
+                cluster.point = point;
+            });
 
-        // Safe point reference in the noise object.
-        series.clusters.noise.forEach(function (noise) {
-            noise.point = series.points[noise.index];
-        });
+            // Safe point reference in the noise object.
+            series.clusters.noise.forEach(function (noise) {
+                noise.point = series.points[noise.index];
+            });
+        }
 
         // Record grouped data in order to let it be destroyed the next time
         // processData runs
