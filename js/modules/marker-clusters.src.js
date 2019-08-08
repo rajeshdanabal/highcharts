@@ -25,11 +25,11 @@ var Series = H.Series,
     addEvent = H.addEvent,
     setOptions = H.setOptions,
     format = H.format,
+    merge = H.merge,
     baseGeneratePoints = seriesProto.generatePoints,
     Tooltip = H.Tooltip,
     baseRefreshTooltip = Tooltip.prototype.refresh,
     clusterDefaultOptions;
-
 
 // Add the cluster related options
 
@@ -43,12 +43,12 @@ clusterDefaultOptions = {
      * @sample
      *
      * @type      {boolean}
-     * @default   true
+     * @default   false
      * @since
      * @apioption cluster.enabled
      */
-    enabled: true,
-
+    enabled: false,
+    allowOverlap: true,
     layoutAlgorithm: {
         /**
          * Type of the algorithm used when positioning nodes.
@@ -58,7 +58,7 @@ clusterDefaultOptions = {
         type: 'gridOnMap',
 
         /**
-         * When `type` is set to 'gridOnView',
+         * When `type` is set to 'gridOnMap',
          * `gridSize` is a size of a grid item element.
          *
          * @type    {number}
@@ -69,19 +69,35 @@ clusterDefaultOptions = {
         minimumClusterSize: 2
     },
     style: {
-        // color: 'green',
+        // fillColor: 'green',
         symbol: 'cluster',
         radius: 12
     },
-    fillColors: [{
-        from: 0,
-        to: 10,
-        color: 'green'
-    }, {
-        from: 10,
-        to: 20,
-        color: 'red'
-    }]
+    dataLabels: {
+        enabled: true,
+        format: '{point.clusteredDataLen}',
+        verticalAlign: 'middle',
+        align: 'center'
+    }
+    // zones: [{
+    //     from: 1,
+    //     to: 10,
+    //     style: {
+    //         symbol: 'cluster',
+    //         fillColor: 'green',
+    //         // lineColor: 'rgba(0, 0, 0, 0.3)',
+    //         radius: 10
+    //     }
+    // }, {
+    //     from: 11,
+    //     to: 20,
+    //     style: {
+    //         symbol: 'cluster',
+    //         fillColor: 'yellow',
+    //         // lineColor: 'rgba(0, 0, 0, 0.3)',
+    //         radius: 15
+    //     }
+    // }]
 };
 
 setOptions({
@@ -102,30 +118,34 @@ setOptions({
 
 // Cluster symbol
 SvgRenderer.prototype.symbols.cluster = function (x, y, w, h) {
-    w = w * 1.2;
-    h = h * 1.2;
+    w = w / 2;
+    h = h / 2;
 
     var outerWidth = 1,
         space = 1,
-        outer2 = this.arc(x + w / 2, y + h / 2, w + space * 2, h + space * 2, {
-            start: Math.PI * 0.5,
-            end: Math.PI * 2.5,
-            innerR: w + outerWidth * 2.5,
-            open: false
-        }),
-        outer1 = this.arc(x + w / 2, y + h / 2, w, h, {
-            start: Math.PI * 0.5,
-            end: Math.PI * 2.5,
-            innerR: w + outerWidth,
-            open: false
-        }),
-        inner = this.arc(x + w / 2, y + h / 2, w - space, h - space, {
-            start: Math.PI * 0.5,
-            end: Math.PI * 2.5,
-            open: false
-        });
+        inner, outer1, outer2;
 
-    return [...outer2, ...outer1, ...inner];
+    inner = this.arc(x + w, y + h, w - space, h - space, {
+        start: Math.PI * 0.5,
+        end: Math.PI * 2.5,
+        open: false
+    });
+
+    outer1 = this.arc(x + w, y + h, w, h, {
+        start: Math.PI * 0.5,
+        end: Math.PI * 2.5,
+        innerR: w + outerWidth,
+        open: false
+    });
+
+    outer2 = this.arc(x + w, y + h, w + space * 2, h + space * 2, {
+        start: Math.PI * 0.5,
+        end: Math.PI * 2.5,
+        innerR: w + outerWidth * 2.5,
+        open: false
+    });
+
+    return outer2.concat(outer1, inner);
 };
 
 defaultOptions.symbols.push('cluster');
@@ -391,15 +411,15 @@ var clusterAlgorithms = {
 };
 
 var preventClusterColisions = {
-    gridOnMap: function (x, y, k, opt) {
+    gridOnMap: function (props) {
         var series = this,
             chart = series.chart,
             xAxis = series.xAxis,
             yAxis = series.yAxis,
-            gridX = +k.split('-')[1],
-            gridY = +k.split('-')[0],
-            gridSize = opt.layoutAlgorithm.gridSize,
-            radius = opt.style.radius + 2,
+            gridX = +props.key.split('-')[1],
+            gridY = +props.key.split('-')[0],
+            gridSize = props.gridSize,
+            radius = props.radius + 2,
             offsetX = xAxis.dataMin < xAxis.min ?
                 Math.abs(
                     xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
@@ -410,8 +430,8 @@ var preventClusterColisions = {
                 ) : 0,
             gridXPx = gridX * gridSize,
             gridYPx = gridY * gridSize,
-            xPx = xAxis.toPixels(x) - chart.plotLeft,
-            yPx = yAxis.toPixels(y) - chart.plotTop;
+            xPx = xAxis.toPixels(props.x) - chart.plotLeft,
+            yPx = yAxis.toPixels(props.y) - chart.plotTop;
 
         if (xPx >= 0 && xPx <= xAxis.len && yPx >= 0 && yPx <= yAxis.len) {
             xPx += offsetX;
@@ -436,8 +456,8 @@ var preventClusterColisions = {
         }
 
         return {
-            x: x,
-            y: y
+            x: props.x,
+            y: props.y
         };
     }
 };
@@ -459,6 +479,7 @@ function getClusteredData(splittedData, options) {
         clusterPos,
         sumX,
         sumY,
+        zoneOptions,
         i,
         k,
         opt;
@@ -482,6 +503,18 @@ function getClusteredData(splittedData, options) {
                 points[i].options = series.options.data[points[i].index];
             }
 
+            // Get zone options for cluster.
+            if (options.zones) {
+                for (i = 0; i < options.zones.length; i++) {
+                    if (
+                        pointsLen >= options.zones[i].from &&
+                        pointsLen <= options.zones[i].to
+                    ) {
+                        zoneOptions = options.zones[i].style;
+                    }
+                }
+            }
+
             // ---- Debug: needed to draw a marker cluster ---- //
             if (options.layoutAlgorithm.debugDrawClusters) {
                 var xAxis = series.xAxis,
@@ -499,10 +532,14 @@ function getClusteredData(splittedData, options) {
             ) {
                 clusterPos = preventClusterColisions.gridOnMap.call(
                     this,
-                    sumX / pointsLen,
-                    sumY / pointsLen,
-                    k,
-                    options
+                    {
+                        x: sumX / pointsLen,
+                        y: sumY / pointsLen,
+                        key: k,
+                        gridSize: options.layoutAlgorithm.gridSize,
+                        radius: (zoneOptions && zoneOptions.radius) ?
+                            zoneOptions.radius : options.style.radius
+                    }
                 );
             } else {
                 clusterPos = {
@@ -524,16 +561,20 @@ function getClusteredData(splittedData, options) {
 
             groupMap.push({
                 options: {
-                    marker: {
+                    dataLabels: options.dataLabels,
+                    marker: merge({
                         symbol: options.style.symbol || 'cluster',
-                        fillColor: options.style.color,
-                        lineColor: options.style.color
-                    },
+                        fillColor: options.style.fillColor,
+                        lineColor: options.style.lineColor,
+                        lineWidth: options.style.lineWidth,
+                        radius: options.style.radius
+                    }, zoneOptions || {}),
                     key: pointsLen
                 }
             });
 
             index++;
+            zoneOptions = null;
         } else {
             for (i = 0; i < splittedData[k].length; i++) {
                 // Points not belonging to any cluster.
