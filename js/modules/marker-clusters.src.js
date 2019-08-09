@@ -19,14 +19,13 @@ import './../parts/SvgRenderer.js';
 
 var Series = H.Series,
     Point = H.Point,
-    seriesProto = Series.prototype,
     SvgRenderer = H.SVGRenderer,
     defaultOptions = H.defaultOptions,
     addEvent = H.addEvent,
     setOptions = H.setOptions,
     format = H.format,
     merge = H.merge,
-    baseGeneratePoints = seriesProto.generatePoints,
+    baseGeneratePoints = Series.prototype.generatePoints,
     Tooltip = H.Tooltip,
     baseRefreshTooltip = Tooltip.prototype.refresh,
     clusterDefaultOptions;
@@ -279,7 +278,7 @@ var debug = {
 };
 
 
-var clusterAlgorithms = {
+Series.prototype.clusterAlgorithms = {
     grid: function (processedXData, processedYData, options) {
         var series = this,
             chart = series.chart,
@@ -333,7 +332,8 @@ var preventClusterColisions = {
             gridX = +props.key.split('-')[1],
             gridY = +props.key.split('-')[0],
             gridSize = props.gridSize,
-            radius = props.radius + 2,
+            splittedData = props.splittedData,
+            radius = props.radius,
             offsetX = xAxis.dataMin < xAxis.min ?
                 Math.abs(
                     xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
@@ -351,16 +351,67 @@ var preventClusterColisions = {
             xPx += offsetX;
             yPx += offsetY;
 
-            if (xPx < gridXPx + radius) {
-                xPx = gridXPx + radius;
+            if (xPx < gridXPx + radius && yPx < gridYPx + radius) {
+                if (splittedData[(gridY - 1) + '-' + (gridX - 1)]) {
+                    xPx = gridXPx + radius;
+                    yPx = gridYPx + radius;
+                } else if (splittedData[(gridY - 1) + '-' + gridX]) {
+                    yPx = gridYPx + radius;
+                } else if (splittedData[gridY + '-' + (gridX - 1)]) {
+                    xPx = gridXPx + radius;
+                }
+            } else if (
+                xPx > gridXPx + gridSize - radius &&
+                yPx < gridYPx + radius
+            ) {
+                if (splittedData[(gridY - 1) + '-' + (gridX + 1)]) {
+                    xPx = gridXPx + gridSize - radius;
+                    yPx = gridYPx + radius;
+                } else if (splittedData[(gridY - 1) + '-' + gridX]) {
+                    yPx = gridYPx + radius;
+                } else if (splittedData[gridY + '-' + (gridX + 1)]) {
+                    xPx = gridXPx + gridSize - radius;
+                }
+            } else if (
+                xPx > gridXPx + gridSize - radius &&
+                yPx > gridYPx + gridSize - radius
+            ) {
+                if (splittedData[(gridY + 1) + '-' + (gridX + 1)]) {
+                    xPx = gridXPx + gridSize - radius;
+                    yPx = gridYPx + gridSize - radius;
+                } else if (splittedData[gridY + '-' + (gridX + 1)]) {
+                    xPx = gridXPx + gridSize - radius;
+                } else if (splittedData[(gridY + 1) + '-' + gridX]) {
+                    yPx = gridYPx + gridSize - radius;
+                }
+            } else if (
+                xPx < gridXPx + radius &&
+                yPx > gridYPx + gridSize - radius
+            ) {
+                if (splittedData[(gridY + 1) + '-' + (gridX - 1)]) {
+                    xPx = gridXPx + radius;
+                    yPx = gridYPx + gridSize - radius;
+                } else if (splittedData[(gridY + 1) + '-' + gridX]) {
+                    yPx = gridYPx + gridSize - radius;
+                } else if (splittedData[gridY + '-' + (gridX - 1)]) {
+                    xPx = gridXPx + radius;
+                }
+            } else if (yPx < gridYPx + radius) {
+                if (splittedData[(gridY - 1) + '-' + gridX]) {
+                    yPx = gridYPx + radius;
+                }
             } else if (xPx > gridXPx + gridSize - radius) {
-                xPx = gridXPx + gridSize - radius;
-            }
-
-            if (yPx < gridYPx + radius) {
-                yPx = gridYPx + radius;
+                if (splittedData[gridY + '-' + (gridX + 1)]) {
+                    xPx = gridXPx + gridSize - radius;
+                }
             } else if (yPx > gridYPx + gridSize - radius) {
-                yPx = gridYPx + gridSize - radius;
+                if (splittedData[(gridY + 1) + '-' + gridX]) {
+                    yPx = gridYPx + gridSize - radius;
+                }
+            } else if (xPx < gridXPx + radius) {
+                if (splittedData[gridY + '-' + (gridX - 1)]) {
+                    xPx = gridXPx + radius;
+                }
             }
 
             return {
@@ -376,7 +427,7 @@ var preventClusterColisions = {
     }
 };
 
-function getClusteredData(splittedData, options) {
+Series.prototype.getClusteredData = function (splittedData, options) {
     var series = this,
         minimumClusterSize = options.minimumClusterSize > 2 ?
             options.minimumClusterSize : 2,
@@ -450,6 +501,7 @@ function getClusteredData(splittedData, options) {
                         x: sumX / pointsLen,
                         y: sumY / pointsLen,
                         key: k,
+                        splittedData: splittedData,
                         gridSize: options.layoutAlgorithm.gridSize,
                         radius: (zoneOptions && zoneOptions.radius) ?
                             zoneOptions.radius : options.style.radius
@@ -526,11 +578,11 @@ function getClusteredData(splittedData, options) {
         groupedYData: groupedYData,
         groupMap: groupMap
     };
-}
+};
 
 
 // Destroy clustered data points
-seriesProto.destroyClusteredData = function () {
+Series.prototype.destroyClusteredData = function () {
     var groupedData = this.groupedData;
 
     // clear previous groups
@@ -543,7 +595,7 @@ seriesProto.destroyClusteredData = function () {
 };
 
 // Override the generatePoints method by adding a reference to grouped data
-seriesProto.generatePoints = function () {
+Series.prototype.generatePoints = function () {
     var series = this,
         marker = series.options.marker,
         algorithm,
@@ -554,16 +606,16 @@ seriesProto.generatePoints = function () {
     if (marker && marker.cluster && marker.cluster.enabled) {
         algorithm = marker.cluster.layoutAlgorithm.type;
 
-        if (clusterAlgorithms[algorithm]) {
+        if (series.clusterAlgorithms[algorithm]) {
 
-            splittedData = clusterAlgorithms[algorithm].call(
+            splittedData = series.clusterAlgorithms[algorithm].call(
                 this,
                 series.processedXData,
                 series.processedYData,
                 marker.cluster.layoutAlgorithm
             );
 
-            clusteredData = getClusteredData.call(
+            clusteredData = series.getClusteredData.call(
                 this, splittedData, marker.cluster
             );
 
@@ -616,7 +668,7 @@ addEvent(Point, 'update', function () {
 });
 
 // Destroy grouped data on series destroy
-addEvent(Series, 'destroy', seriesProto.destroyClusteredData);
+addEvent(Series, 'destroy', Series.prototype.destroyClusteredData);
 
 // Extend the original method, add clusterFormatter.
 Tooltip.prototype.refresh = function (pointOrPoints, mouseEvent) {
