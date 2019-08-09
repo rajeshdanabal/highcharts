@@ -55,10 +55,10 @@ clusterDefaultOptions = {
          *
          * @type {string}
          */
-        type: 'gridOnMap',
+        type: 'grid',
 
         /**
-         * When `type` is set to 'gridOnMap',
+         * When `type` is set to 'grid',
          * `gridSize` is a size of a grid item element.
          *
          * @type    {number}
@@ -192,59 +192,7 @@ var debug = {
         chart[clusterId].push(elem);
         chart[clusterId].push(textElem);
     },
-    drawGridLinesPerView: function (size, series) {
-        var chart = series.chart,
-            xAxisLen = series.xAxis.len,
-            yAxisLen = series.yAxis.len,
-            gridX = Math.ceil(xAxisLen / size),
-            gridY = Math.ceil(yAxisLen / size),
-            i, j, elem, text;
-
-        if (chart.debugGridLines && chart.debugGridLines.length) {
-            chart.debugGridLines.forEach(function (gridItem) {
-                if (gridItem && gridItem.destroy) {
-                    gridItem.destroy();
-                }
-            });
-        }
-
-        chart.debugGridLines = [];
-
-        for (i = 0; i < gridX; i++) {
-            for (j = 0; j < gridY; j++) {
-                elem = chart.renderer
-                    .rect(
-                        chart.plotLeft + i * size,
-                        chart.plotTop + j * size,
-                        size,
-                        size
-                    )
-                    .attr({
-                        stroke: '#000',
-                        'stroke-width': '1px'
-                    })
-                    .add()
-                    .toFront();
-
-                text = chart.renderer
-                    .text(
-                        j + '-' + i,
-                        chart.plotLeft + i * size + 5,
-                        chart.plotTop + j * size + 15
-                    )
-                    .css({
-                        fill: 'rgba(0, 0, 0, 0.7)',
-                        fontSize: '11px'
-                    })
-                    .add()
-                    .toFront();
-
-                chart.debugGridLines.push(elem);
-                chart.debugGridLines.push(text);
-            }
-        }
-    },
-    drawGridLinesPerMap: function (size, series) {
+    drawGridLines: function (size, series) {
         var chart = series.chart,
             xAxis = series.xAxis,
             yAxis = series.yAxis,
@@ -332,41 +280,7 @@ var debug = {
 
 
 var clusterAlgorithms = {
-    gridOnView: function (processedXData, processedYData, options) {
-        var series = this,
-            chart = series.chart,
-            xAxis = series.xAxis,
-            yAxis = series.yAxis,
-            gridSize = options.gridSize,
-            grid = {},
-            x, y, gridX, gridY, key, i;
-
-        // ---- Debug: needed to draw grid lines ---- //
-        if (options.debugDrawGridLines) {
-            debug.drawGridLinesPerView(gridSize, series);
-        }
-
-        for (i = 0; i < processedXData.length; i++) {
-            x = xAxis.toPixels(processedXData[i]) - chart.plotLeft;
-            y = yAxis.toPixels(processedYData[i]) - chart.plotTop;
-            gridX = Math.floor(x / gridSize);
-            gridY = Math.floor(y / gridSize);
-            key = gridY + '-' + gridX;
-
-            if (!grid[key]) {
-                grid[key] = [];
-            }
-
-            grid[key].push({
-                index: i,
-                x: processedXData[i],
-                y: processedYData[i]
-            });
-        }
-
-        return grid;
-    },
-    gridOnMap: function (processedXData, processedYData, options) {
+    grid: function (processedXData, processedYData, options) {
         var series = this,
             chart = series.chart,
             xAxis = series.xAxis,
@@ -385,7 +299,7 @@ var clusterAlgorithms = {
 
         // ---- Debug: needed to draw grid lines ---- //
         if (options.debugDrawGridLines) {
-            debug.drawGridLinesPerMap(options.gridSize, series);
+            debug.drawGridLines(options.gridSize, series);
         }
 
         for (i = 0; i < processedXData.length; i++) {
@@ -411,7 +325,7 @@ var clusterAlgorithms = {
 };
 
 var preventClusterColisions = {
-    gridOnMap: function (props) {
+    grid: function (props) {
         var series = this,
             chart = series.chart,
             xAxis = series.xAxis,
@@ -527,10 +441,10 @@ function getClusteredData(splittedData, options) {
             // ---- Debug: needed to draw a marker cluster ---- //
 
             if (
-                options.layoutAlgorithm.type === 'gridOnMap' &&
+                options.layoutAlgorithm.type === 'grid' &&
                 !options.allowOverlap
             ) {
-                clusterPos = preventClusterColisions.gridOnMap.call(
+                clusterPos = preventClusterColisions.grid.call(
                     this,
                     {
                         x: sumX / pointsLen,
