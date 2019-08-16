@@ -22,12 +22,9 @@ var Series = H.Series,
     SvgRenderer = H.SVGRenderer,
     defaultOptions = H.defaultOptions,
     addEvent = H.addEvent,
-    setOptions = H.setOptions,
-    format = H.format,
     merge = H.merge,
+    extend = H.extend,
     baseGeneratePoints = Series.prototype.generatePoints,
-    Tooltip = H.Tooltip,
-    baseRefreshTooltip = Tooltip.prototype.refresh,
     clusterDefaultOptions;
 
 // Add the cluster related options
@@ -48,6 +45,7 @@ clusterDefaultOptions = {
      */
     enabled: false,
     allowOverlap: true,
+    minimumClusterSize: 2,
     layoutAlgorithm: {
         /**
          * Type of the algorithm used when positioning nodes.
@@ -64,8 +62,7 @@ clusterDefaultOptions = {
          * @default 50
          * @since
          */
-        gridSize: 50,
-        minimumClusterSize: 2
+        gridSize: 50
     },
     style: {
         // fillColor: 'green',
@@ -99,26 +96,22 @@ clusterDefaultOptions = {
     // }]
 };
 
-setOptions({
-    plotOptions: {
-        series: {
-            marker: {
-                cluster: clusterDefaultOptions
-            },
-            tooltip: {
-                headerClusterFormat: '',
-                footerClusterFormat: '',
-                pointClusterFormat: '<span>Clustered points: ' +
-                    '{point.clusteredDataLen}</span><br/>'
-            }
+H.defaultOptions.plotOptions = extend({
+    series: {
+        marker: {
+            cluster: clusterDefaultOptions
+        },
+        tooltip: {
+            clusterFormat: '<span>Clustered points: ' +
+                '{point.clusteredDataLen}</span><br/>'
         }
     }
-});
+}, H.defaultOptions.plotOptions);
 
 // Cluster symbol
-SvgRenderer.prototype.symbols.cluster = function (x, y, w, h) {
-    w = w / 2;
-    h = h / 2;
+SvgRenderer.prototype.symbols.cluster = function (x, y, width, height) {
+    var w = width / 2,
+        h = height / 2;
 
     var outerWidth = 1,
         space = 1,
@@ -344,79 +337,62 @@ var preventClusterColisions = {
                 ) : 0,
             gridXPx = gridX * gridSize,
             gridYPx = gridY * gridSize,
-            xPx = xAxis.toPixels(props.x) - chart.plotLeft,
-            yPx = yAxis.toPixels(props.y) - chart.plotTop;
+            xPixel = xAxis.toPixels(props.x) - chart.plotLeft,
+            yPixel = yAxis.toPixels(props.y) - chart.plotTop,
+            gridsToCheckCollision = [],
+            signX,
+            signY,
+            cornerGridX,
+            cornerGridY,
+            i,
+            itemX,
+            itemY;
 
-        if (xPx >= 0 && xPx <= xAxis.len && yPx >= 0 && yPx <= yAxis.len) {
-            xPx += offsetX;
-            yPx += offsetY;
+        if (
+            xPixel >= 0 &&
+            xPixel <= xAxis.len &&
+            yPixel >= 0 &&
+            yPixel <= yAxis.len
+        ) {
+            xPixel += offsetX;
+            yPixel += offsetY;
 
-            if (xPx < gridXPx + radius && yPx < gridYPx + radius) {
-                if (splittedData[(gridY - 1) + '-' + (gridX - 1)]) {
-                    xPx = gridXPx + radius;
-                    yPx = gridYPx + radius;
-                } else if (splittedData[(gridY - 1) + '-' + gridX]) {
-                    yPx = gridYPx + radius;
-                } else if (splittedData[gridY + '-' + (gridX - 1)]) {
-                    xPx = gridXPx + radius;
-                }
-            } else if (
-                xPx > gridXPx + gridSize - radius &&
-                yPx < gridYPx + radius
-            ) {
-                if (splittedData[(gridY - 1) + '-' + (gridX + 1)]) {
-                    xPx = gridXPx + gridSize - radius;
-                    yPx = gridYPx + radius;
-                } else if (splittedData[(gridY - 1) + '-' + gridX]) {
-                    yPx = gridYPx + radius;
-                } else if (splittedData[gridY + '-' + (gridX + 1)]) {
-                    xPx = gridXPx + gridSize - radius;
-                }
-            } else if (
-                xPx > gridXPx + gridSize - radius &&
-                yPx > gridYPx + gridSize - radius
-            ) {
-                if (splittedData[(gridY + 1) + '-' + (gridX + 1)]) {
-                    xPx = gridXPx + gridSize - radius;
-                    yPx = gridYPx + gridSize - radius;
-                } else if (splittedData[gridY + '-' + (gridX + 1)]) {
-                    xPx = gridXPx + gridSize - radius;
-                } else if (splittedData[(gridY + 1) + '-' + gridX]) {
-                    yPx = gridYPx + gridSize - radius;
-                }
-            } else if (
-                xPx < gridXPx + radius &&
-                yPx > gridYPx + gridSize - radius
-            ) {
-                if (splittedData[(gridY + 1) + '-' + (gridX - 1)]) {
-                    xPx = gridXPx + radius;
-                    yPx = gridYPx + gridSize - radius;
-                } else if (splittedData[(gridY + 1) + '-' + gridX]) {
-                    yPx = gridYPx + gridSize - radius;
-                } else if (splittedData[gridY + '-' + (gridX - 1)]) {
-                    xPx = gridXPx + radius;
-                }
-            } else if (yPx < gridYPx + radius) {
-                if (splittedData[(gridY - 1) + '-' + gridX]) {
-                    yPx = gridYPx + radius;
-                }
-            } else if (xPx > gridXPx + gridSize - radius) {
-                if (splittedData[gridY + '-' + (gridX + 1)]) {
-                    xPx = gridXPx + gridSize - radius;
-                }
-            } else if (yPx > gridYPx + gridSize - radius) {
-                if (splittedData[(gridY + 1) + '-' + gridX]) {
-                    yPx = gridYPx + gridSize - radius;
-                }
-            } else if (xPx < gridXPx + radius) {
-                if (splittedData[gridY + '-' + (gridX - 1)]) {
-                    xPx = gridXPx + radius;
+            for (i = 1; i < 5; i++) {
+                signX = i % 2 === 1 ? -1 : 1;
+                signY = i < 3 ? -1 : 1;
+
+                cornerGridX = Math.floor(
+                    (xPixel + signX * radius) / gridSize
+                );
+                cornerGridY = Math.floor(
+                    (yPixel + signY * radius) / gridSize
+                );
+
+                if (cornerGridX !== gridX || cornerGridY !== gridY) {
+                    gridsToCheckCollision.push(cornerGridY + '-' + cornerGridX);
                 }
             }
 
+            gridsToCheckCollision.forEach(function (item) {
+                if (splittedData[item]) {
+                    itemX = +item.split('-')[1];
+                    itemY = +item.split('-')[0];
+
+                    if (itemX !== gridX) {
+                        xPixel = itemX - gridX < 0 ?
+                            gridXPx + radius : gridXPx + gridSize - radius;
+                    }
+
+                    if (itemY !== gridY) {
+                        yPixel = itemY - gridY < 0 ?
+                            gridYPx + radius : gridYPx + gridSize - radius;
+                    }
+                }
+            });
+
             return {
-                x: xAxis.toValue(xPx + chart.plotLeft - offsetX),
-                y: yAxis.toValue(yPx + chart.plotTop - offsetY)
+                x: xAxis.toValue(xPixel + chart.plotLeft - offsetX),
+                y: yAxis.toValue(yPixel + chart.plotTop - offsetY)
             };
         }
 
@@ -527,6 +503,7 @@ Series.prototype.getClusteredData = function (splittedData, options) {
 
             groupMap.push({
                 options: {
+                    formatPrefix: 'cluster',
                     dataLabels: options.dataLabels,
                     marker: merge({
                         symbol: options.style.symbol || 'cluster',
@@ -571,6 +548,8 @@ Series.prototype.getClusteredData = function (splittedData, options) {
         }
     }
 
+    // To DO - make another function to prevent clasters collision
+
     return {
         clusters: clusters,
         noise: noise,
@@ -581,17 +560,17 @@ Series.prototype.getClusteredData = function (splittedData, options) {
 };
 
 
-// Destroy clustered data points
+// // Destroy clustered data points
 Series.prototype.destroyClusteredData = function () {
-    var groupedData = this.groupedData;
+    var clusteredData = this.clusteredData;
 
     // clear previous groups
-    (groupedData || []).forEach(function (point, i) {
+    (clusteredData || []).forEach(function (point, i) {
         if (point) {
-            groupedData[i] = point.destroy ? point.destroy() : null;
+            clusteredData[i] = point.destroy ? point.destroy() : null;
         }
     });
-    this.groupedData = null;
+    this.clusteredData = null;
 };
 
 // Override the generatePoints method by adding a reference to grouped data
@@ -651,7 +630,7 @@ Series.prototype.generatePoints = function () {
         // Record grouped data in order to let it be destroyed the next time
         // processData runs
         this.destroyClusteredData();
-        this.groupedData = this.hasGroupedData ? this.points : null;
+        this.clusteredData = this.hasGroupedData ? this.points : null;
     } else {
         baseGeneratePoints.apply(this);
     }
@@ -662,7 +641,7 @@ Series.prototype.generatePoints = function () {
 addEvent(Point, 'update', function () {
     if (this.dataGroup) {
         // Update cluster error
-        // H.error(24, false, this.series.chart);
+        // H.error(50, false, this.series.chart);
         return false;
     }
 });
@@ -670,66 +649,13 @@ addEvent(Point, 'update', function () {
 // Destroy grouped data on series destroy
 addEvent(Series, 'destroy', Series.prototype.destroyClusteredData);
 
-// Extend the original method, add clusterFormatter.
-Tooltip.prototype.refresh = function (pointOrPoints, mouseEvent) {
-    var tooltip = this,
-        options = tooltip.options,
-        baseFormatter = options.formatter;
+// Add class for clusters.
+addEvent(Series, 'afterRender', function () {
+    var series = this;
 
-    if (pointOrPoints.isCluster && options.clusterFormatter) {
-        options.formatter = options.clusterFormatter;
+    if (series.clusters && series.clusters.clusters) {
+        series.clusters.clusters.forEach(function (cluster) {
+            cluster.point.graphic.addClass('highcharts-cluster-point');
+        });
     }
-
-    baseRefreshTooltip.call(this, pointOrPoints, mouseEvent);
-    options.formatter = baseFormatter;
-};
-
-// Extend the original method, add pointClusterFormat.
-Tooltip.prototype.bodyFormatter = function (items) {
-    return items.map(function (item) {
-        var tooltipOptions = item.series.tooltipOptions,
-            format;
-
-        if (item.point.isCluster) {
-            format = tooltipOptions.pointClusterFormat || '';
-        } else {
-            format = tooltipOptions[
-                (item.point.formatPrefix || 'point') + 'Format'
-            ] || '';
-        }
-
-        return (
-            tooltipOptions[
-                (item.point.formatPrefix || 'point') + 'Formatter'
-            ] ||
-            item.point.tooltipFormatter
-        ).call(
-            item.point,
-            format
-        );
-    });
-};
-
-// Extend the original method, add headerClusterFormat and footerClusterFormat.
-addEvent(Tooltip, 'headerFormatter', function (e) {
-    var tooltip = this,
-        time = tooltip.chart.time,
-        labelConfig = e.labelConfig,
-        series = labelConfig.series,
-        point = labelConfig.point,
-        tooltipOptions = series.tooltipOptions,
-        partFormat = point.isCluster ? 'ClusterFormat' : 'Format',
-        formatString =
-            tooltipOptions[(e.isFooter ? 'footer' : 'header') + partFormat];
-
-    // Replace default header style with class name
-    if (series.chart.styledMode) {
-        formatString = this.styledModeFormat(formatString);
-    }
-    // return the replaced format
-    e.text = format(formatString, {
-        point: labelConfig.point,
-        series: series
-    }, time);
-    e.preventDefault();
 });
