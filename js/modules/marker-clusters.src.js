@@ -67,7 +67,7 @@ clusterDefaultOptions = {
     style: {
         // fillColor: 'green',
         symbol: 'cluster',
-        radius: 12
+        radius: 15
     },
     dataLabels: {
         enabled: true,
@@ -111,29 +111,28 @@ H.defaultOptions.plotOptions = extend({
 // Cluster symbol
 SvgRenderer.prototype.symbols.cluster = function (x, y, width, height) {
     var w = width / 2,
-        h = height / 2;
-
-    var outerWidth = 1,
+        h = height / 2,
+        outerWidth = 1,
         space = 1,
         inner, outer1, outer2;
 
-    inner = this.arc(x + w, y + h, w - space, h - space, {
+    inner = this.arc(x + w, y + h, w - space * 4, h - space * 4, {
         start: Math.PI * 0.5,
         end: Math.PI * 2.5,
         open: false
     });
 
-    outer1 = this.arc(x + w, y + h, w, h, {
+    outer1 = this.arc(x + w, y + h, w - space * 3, h - space * 3, {
         start: Math.PI * 0.5,
         end: Math.PI * 2.5,
-        innerR: w + outerWidth,
+        innerR: w - outerWidth * 2,
         open: false
     });
 
-    outer2 = this.arc(x + w, y + h, w + space * 2, h + space * 2, {
+    outer2 = this.arc(x + w, y + h, w - space, h - space, {
         start: Math.PI * 0.5,
         end: Math.PI * 2.5,
-        innerR: w + outerWidth * 2.5,
+        innerR: w,
         open: false
     });
 
@@ -316,91 +315,149 @@ Series.prototype.clusterAlgorithms = {
     }
 };
 
-var preventClusterColisions = {
-    grid: function (props) {
-        var series = this,
-            chart = series.chart,
-            xAxis = series.xAxis,
-            yAxis = series.yAxis,
-            gridX = +props.key.split('-')[1],
-            gridY = +props.key.split('-')[0],
-            gridSize = props.gridSize,
-            splittedData = props.splittedData,
-            radius = props.radius,
-            offsetX = xAxis.dataMin < xAxis.min ?
-                Math.abs(
-                    xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
-                ) : 0,
-            offsetY = yAxis.dataMin < yAxis.min ?
-                Math.abs(
-                    yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin)
-                ) : 0,
-            gridXPx = gridX * gridSize,
-            gridYPx = gridY * gridSize,
-            xPixel = xAxis.toPixels(props.x) - chart.plotLeft,
-            yPixel = yAxis.toPixels(props.y) - chart.plotTop,
-            gridsToCheckCollision = [],
-            signX,
-            signY,
-            cornerGridX,
-            cornerGridY,
-            i,
-            itemX,
-            itemY;
+Series.prototype.computeClusterPos = function (points) {
+    var pointsLen = points.length,
+        sumX = 0,
+        sumY = 0,
+        i;
 
-        if (
-            xPixel >= 0 &&
-            xPixel <= xAxis.len &&
-            yPixel >= 0 &&
-            yPixel <= yAxis.len
-        ) {
-            xPixel += offsetX;
-            yPixel += offsetY;
+    for (i = 0; i < pointsLen; i++) {
+        sumX += points[i].x;
+        sumY += points[i].y;
+    }
 
-            for (i = 1; i < 5; i++) {
-                signX = i % 2 === 1 ? -1 : 1;
-                signY = i < 3 ? -1 : 1;
+    return {
+        x: sumX / pointsLen,
+        y: sumY / pointsLen
+    };
+};
 
-                cornerGridX = Math.floor(
-                    (xPixel + signX * radius) / gridSize
-                );
-                cornerGridY = Math.floor(
-                    (yPixel + signY * radius) / gridSize
-                );
+Series.prototype.preventClusterColisions = function (props) {
+    var series = this,
+        chart = series.chart,
+        xAxis = series.xAxis,
+        yAxis = series.yAxis,
+        gridX = +props.key.split('-')[1],
+        gridY = +props.key.split('-')[0],
+        gridSize = props.gridSize,
+        splittedData = props.splittedData,
+        defaultRadius = props.defaultRadius,
+        clusterRadius = props.clusterRadius,
+        offsetX = xAxis.dataMin < xAxis.min ?
+            Math.abs(
+                xAxis.toPixels(xAxis.min) - xAxis.toPixels(xAxis.dataMin)
+            ) : 0,
+        offsetY = yAxis.dataMin < yAxis.min ?
+            Math.abs(
+                yAxis.toPixels(yAxis.min) - yAxis.toPixels(yAxis.dataMin)
+            ) : 0,
+        gridXPx = gridX * gridSize,
+        gridYPx = gridY * gridSize,
+        xPixel = xAxis.toPixels(props.x) - chart.plotLeft,
+        yPixel = yAxis.toPixels(props.y) - chart.plotTop,
+        gridsToCheckCollision = [],
+        radius,
+        nextXPixel,
+        nextYPixel,
+        signX,
+        signY,
+        cornerGridX,
+        cornerGridY,
+        i,
+        itemX,
+        itemY,
+        nextClusterPos,
+        maxDist,
+        x,
+        y;
 
-                if (cornerGridX !== gridX || cornerGridY !== gridY) {
-                    gridsToCheckCollision.push(cornerGridY + '-' + cornerGridX);
-                }
+    if (
+        xPixel >= 0 &&
+        xPixel <= xAxis.len &&
+        yPixel >= 0 &&
+        yPixel <= yAxis.len
+    ) {
+        xPixel += offsetX;
+        yPixel += offsetY;
+
+        for (i = 1; i < 5; i++) {
+            signX = i % 2 === 1 ? -1 : 1;
+            signY = i < 3 ? -1 : 1;
+
+            cornerGridX = Math.floor(
+                (xPixel + signX * clusterRadius) / gridSize
+            );
+            cornerGridY = Math.floor(
+                (yPixel + signY * clusterRadius) / gridSize
+            );
+
+            if (cornerGridX !== gridX || cornerGridY !== gridY) {
+                gridsToCheckCollision.push(cornerGridY + '-' + cornerGridX);
             }
-
-            gridsToCheckCollision.forEach(function (item) {
-                if (splittedData[item]) {
-                    itemX = +item.split('-')[1];
-                    itemY = +item.split('-')[0];
-
-                    if (itemX !== gridX) {
-                        xPixel = itemX - gridX < 0 ?
-                            gridXPx + radius : gridXPx + gridSize - radius;
-                    }
-
-                    if (itemY !== gridY) {
-                        yPixel = itemY - gridY < 0 ?
-                            gridYPx + radius : gridYPx + gridSize - radius;
-                    }
-                }
-            });
-
-            return {
-                x: xAxis.toValue(xPixel + chart.plotLeft - offsetX),
-                y: yAxis.toValue(yPixel + chart.plotTop - offsetY)
-            };
         }
 
+        gridsToCheckCollision.forEach(function (item) {
+            if (splittedData[item]) {
+                // Cluster or noise position is already computed.
+                if (!splittedData[item].posX) {
+                    nextClusterPos = series.computeClusterPos(
+                        splittedData[item]
+                    );
+
+                    splittedData[item].posX = nextClusterPos.x;
+                    splittedData[item].posY = nextClusterPos.y;
+                }
+
+                nextXPixel = xAxis.toPixels(splittedData[item].posX) -
+                    chart.plotLeft + offsetX;
+
+                nextYPixel = yAxis.toPixels(splittedData[item].posY) -
+                    chart.plotTop + offsetY;
+
+                itemX = +item.split('-')[1];
+                itemY = +item.split('-')[0];
+
+                radius = splittedData[item].length > 1 ?
+                    clusterRadius : defaultRadius;
+
+                maxDist = clusterRadius + radius;
+
+                if (
+                    itemX !== gridX &&
+                    Math.abs(xPixel - nextXPixel) < maxDist
+                ) {
+                    xPixel = itemX - gridX < 0 ? gridXPx + clusterRadius :
+                        gridXPx + gridSize - clusterRadius;
+                    // nextXPixel + maxDist : nextXPixel - maxDist;
+                }
+
+                if (
+                    itemY !== gridY &&
+                    Math.abs(yPixel - nextYPixel) < maxDist
+                ) {
+                    yPixel = itemY - gridY < 0 ? gridYPx + clusterRadius :
+                        gridYPx + gridSize - clusterRadius;
+                    // nextYPixel + maxDist : nextYPixel - maxDist;
+                }
+            }
+        });
+
+        x = xAxis.toValue(xPixel + chart.plotLeft - offsetX);
+        y = yAxis.toValue(yPixel + chart.plotTop - offsetY);
+
+        splittedData[props.key].posX = x;
+        splittedData[props.key].posY = y;
+
         return {
-            x: props.x,
-            y: props.y
+            x: x,
+            y: y
         };
     }
+
+    return {
+        x: props.x,
+        y: props.y
+    };
 };
 
 Series.prototype.getClusteredData = function (splittedData, options) {
@@ -418,8 +475,7 @@ Series.prototype.getClusteredData = function (splittedData, options) {
         points,
         pointsLen,
         clusterPos,
-        sumX,
-        sumY,
+        clusterTempPos,
         zoneOptions,
         i,
         k,
@@ -433,16 +489,6 @@ Series.prototype.getClusteredData = function (splittedData, options) {
 
             points = splittedData[k];
             pointsLen = points.length;
-            sumX = 0;
-            sumY = 0;
-
-            for (i = 0; i < pointsLen; i++) {
-                sumX += points[i].x;
-                sumY += points[i].y;
-
-                // Save cluster data points options.
-                points[i].options = series.options.data[points[i].index];
-            }
 
             // Get zone options for cluster.
             if (options.zones) {
@@ -456,12 +502,14 @@ Series.prototype.getClusteredData = function (splittedData, options) {
                 }
             }
 
+            clusterTempPos = series.computeClusterPos(points);
+
             // ---- Debug: needed to draw a marker cluster ---- //
             if (options.layoutAlgorithm.debugDrawClusters) {
                 var xAxis = series.xAxis,
                     yAxis = series.yAxis,
-                    debugPosX = xAxis.toPixels(sumX / pointsLen),
-                    debugPosY = yAxis.toPixels(sumY / pointsLen);
+                    debugPosX = xAxis.toPixels(clusterTempPos.x),
+                    debugPosY = yAxis.toPixels(clusterTempPos.y);
 
                 debug.drawCluster(debugPosX, debugPosY, pointsLen, series);
             }
@@ -471,22 +519,24 @@ Series.prototype.getClusteredData = function (splittedData, options) {
                 options.layoutAlgorithm.type === 'grid' &&
                 !options.allowOverlap
             ) {
-                clusterPos = preventClusterColisions.grid.call(
+                clusterPos = series.preventClusterColisions.call(
                     this,
                     {
-                        x: sumX / pointsLen,
-                        y: sumY / pointsLen,
+                        x: clusterTempPos.x,
+                        y: clusterTempPos.y,
                         key: k,
                         splittedData: splittedData,
                         gridSize: options.layoutAlgorithm.gridSize,
-                        radius: (zoneOptions && zoneOptions.radius) ?
+                        defaultRadius: series.options.marker.radius +
+                            series.options.marker.lineWidth,
+                        clusterRadius: (zoneOptions && zoneOptions.radius) ?
                             zoneOptions.radius : options.style.radius
                     }
                 );
             } else {
                 clusterPos = {
-                    x: sumX / pointsLen,
-                    y: sumY / pointsLen
+                    x: clusterTempPos.x,
+                    y: clusterTempPos.y
                 };
             }
 
@@ -515,6 +565,11 @@ Series.prototype.getClusteredData = function (splittedData, options) {
                     key: pointsLen
                 }
             });
+
+            // Save cluster data points options.
+            for (i = 0; i < pointsLen; i++) {
+                points[i].options = series.options.data[points[i].index];
+            }
 
             index++;
             zoneOptions = null;
@@ -560,7 +615,7 @@ Series.prototype.getClusteredData = function (splittedData, options) {
 };
 
 
-// // Destroy clustered data points
+// Destroy clustered data points
 Series.prototype.destroyClusteredData = function () {
     var clusteredData = this.clusteredData;
 
@@ -655,7 +710,9 @@ addEvent(Series, 'afterRender', function () {
 
     if (series.clusters && series.clusters.clusters) {
         series.clusters.clusters.forEach(function (cluster) {
-            cluster.point.graphic.addClass('highcharts-cluster-point');
+            if (cluster.point.graphic) {
+                cluster.point.graphic.addClass('highcharts-cluster-point');
+            }
         });
     }
 });
