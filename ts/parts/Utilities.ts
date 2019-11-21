@@ -2378,7 +2378,7 @@ function animObject(
  *
  * @ignore
  */
-H.timeUnits = {
+const timeUnits = {
     millisecond: 1,
     second: 1000,
     minute: 60000,
@@ -3428,6 +3428,7 @@ const utils = {
     setAnimation,
     splat,
     syncTimeout,
+    timeUnits,
     wrap
 };
 
