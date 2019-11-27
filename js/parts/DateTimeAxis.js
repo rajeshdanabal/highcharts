@@ -78,18 +78,18 @@ Axis.prototype.normalizeTimeTickInterval = function (tickInterval, unitsOption) 
             'year',
             null
         ]], unit = units[units.length - 1], // default unit is years
-    interval = timeUnits[unit[0]], multiples = unit[1], count, i;
+    interval = (timeUnits)[unit[0]], multiples = unit[1], count, i;
     // loop through the units to find the one that best fits the tickInterval
     for (i = 0; i < units.length; i++) {
         unit = units[i];
-        interval = timeUnits[unit[0]];
+        interval = (timeUnits)[unit[0]];
         multiples = unit[1];
         if (units[i + 1]) {
             // lessThan is in the middle between the highest multiple and the
             // next unit.
             var lessThan = (interval *
                 multiples[multiples.length - 1] +
-                timeUnits[units[i + 1][0]]) / 2;
+                (timeUnits)[units[i + 1][0]]) / 2;
             // break and keep the current unit
             if (tickInterval <= lessThan) {
                 break;

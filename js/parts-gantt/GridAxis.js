@@ -433,7 +433,7 @@ function (e) {
                             unitName = 'year';
                             count = parentInfo.count * 10;
                         }
-                        unitRange = timeUnits[unitName];
+                        unitRange = (timeUnits)[unitName];
                         this.tickInterval = unitRange * count;
                         return this.getTimeTicks({
                             unitRange: unitRange,

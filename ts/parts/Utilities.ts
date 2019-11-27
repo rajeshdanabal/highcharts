@@ -141,7 +141,6 @@ declare global {
             private update(): void;
         }
         let timers: Array<any>;
-        let timeUnits: Dictionary<number>;
         function addEvent<T>(
             el: (Class<T>|T),
             type: string,
@@ -2378,7 +2377,7 @@ function animObject(
  *
  * @ignore
  */
-const timeUnits = {
+const timeUnits: Highcharts.Dictionary<number> = {
     millisecond: 1,
     second: 1000,
     minute: 60000,
