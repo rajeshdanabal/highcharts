@@ -396,13 +396,18 @@ funnel3dMethods = H.merge(RendererProto.elements3d.cuboid, {
     pathType: 'funnel3d',
     // override opacity and color setters to control opacity
     opacitySetter: function (opacity) {
-        var funnel3d = this, parts = funnel3d.parts, chart = H.charts[funnel3d.renderer.chartIndex], filterId = 'group-opacity-' + opacity + '-' + chart.index;
+        var funnel3d = this, parts = funnel3d.parts, chart = H.charts[funnel3d.renderer.chartIndex];
+        if(!chart){
+            var charts = H.charts.filter((chart) => chart);
+            chart = charts[charts.length - 1];
+        }
+        var filterId = 'group-opacity-' + opacity + '-' + chart.index;
         // use default for top and bottom
         funnel3d.parts = funnel3d.mainParts;
         funnel3d.singleSetterForParts('opacity', opacity);
         // restore
         funnel3d.parts = parts;
-        if (!chart.renderer.filterId) {
+        if (chart.renderer && !chart.renderer.filterId) {
             chart.renderer.definition({
                 tagName: 'filter',
                 id: filterId,
